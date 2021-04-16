@@ -59,6 +59,18 @@ int read_rtable(struct route_table_entry *rtable, char *file_name) {
 	return i;
 }
 
+int route_entry_cmp(const void* a, const void* b) {
+	struct route_table_entry e1 = *(struct route_table_entry *) a;
+	struct route_table_entry e2 = *(struct route_table_entry *) b;
+
+	if ((e1.prefix > e2.prefix) 
+		|| (e1.prefix == e2.prefix && e1.mask > e2.mask)) {
+		return 1;
+	}
+
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	packet m;
@@ -69,6 +81,9 @@ int main(int argc, char *argv[])
 	// Parse routing table
 	struct route_table_entry *rtable = calloc(MAX_RTABLE_SIZE, sizeof(struct route_table_entry));
 	int rtable_size = read_rtable(rtable, argv[1]);
+
+	// Sort routing table - setting up binary search
+	qsort(rtable, rtable_size, sizeof(struct route_table_entry), route_entry_cmp);
 
 	// while (1) {
 	// 	rc = get_packet(&m);
