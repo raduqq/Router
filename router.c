@@ -1,6 +1,5 @@
 #include <queue.h>
 #include "skel.h"
-
 struct route_table_entry {
 	uint32_t prefix;
 	uint32_t next_hop;
@@ -30,15 +29,21 @@ int read_rtable(struct route_table_entry *rtable, char *file_name) {
 	while (fgets(buf, sizeof(buf), f)) {
 		// Prefix
 		token = strtok(buf, DELIM);
-		DIE((status = inet_pton(AF_INET, buf, rtable[i].prefix)) != 1, "rtable parsing - convert prefix");
+		DIE((status = inet_pton(AF_INET, token, &rtable[i].prefix)) != 1, "rtable parsing - convert prefix");
+		// Convert to host endianness
+		rtable[i].prefix = ntohl(rtable[i].prefix);
 
 		// Next_hop
 		token = strtok(NULL, DELIM);
-		DIE((status = inet_pton(AF_INET, buf, rtable[i].next_hop)) != 1, "rtable parsing - convert next_hop");
-
+		DIE((status = inet_pton(AF_INET, token, &rtable[i].next_hop)) != 1, "rtable parsing - convert next_hop");
+		// Convert to host endianness
+		rtable[i].next_hop = ntohl(rtable[i].next_hop);
+		
 		// Mask
 		token = strtok(NULL, DELIM);
-		DIE((status = inet_pton(AF_INET, buf, rtable[i].mask)) != 1, "rtable parsing - convert mask");
+		DIE((status = inet_pton(AF_INET, token, &rtable[i].mask)) != 1, "rtable parsing - convert mask");
+		// Convert to host endianness
+		rtable[i].mask = ntohl(rtable[i].mask);
 
 		// Interface
 		token = strtok(NULL, DELIM);
@@ -65,9 +70,9 @@ int main(int argc, char *argv[])
 	struct route_table_entry *rtable = calloc(MAX_RTABLE_SIZE, sizeof(struct route_table_entry));
 	int rtable_size = read_rtable(rtable, argv[1]);
 
-	while (1) {
-		rc = get_packet(&m);
-		DIE(rc < 0, "get_message");
-		/* Students will write code here */
-	}
+	// while (1) {
+	// 	rc = get_packet(&m);
+	// 	DIE(rc < 0, "get_message");
+	// 	/* Students will write code here */
+	// }
 }
