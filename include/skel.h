@@ -37,6 +37,7 @@
 #define DELIM " "
 #define MAX_RTABLE_SIZE 100000
 #define MAX_ARP_TABLE_SIZE 100000
+#define BROADCAST_ADDR "ff:ff:ff:ff:ff:ff"
 
 #define DIE(condition, message) \
 	do { \
@@ -234,3 +235,22 @@ int route_entry_cmp(const void *a, const void *b);
  * @return struct route_table_entry* best route towards destination 
  */
 struct route_table_entry *get_best_route(uint32_t dest_ip, struct route_table_entry *rtable, int rtable_size);
+
+/**
+ * @brief  Returns a pointer (eg. &arp_table[i]) to the best matching ARP entry.
+ * for the given dest_ip or NULL if there is no matching entry.
+ * 
+ * @param dest_ip IP of target
+ * @return struct arp_entry* - matching entry in ARP table
+ */
+struct arp_entry *get_arp_entry(uint32_t dest_ip, struct arp_entry *arp_table, int table_size);
+
+/**
+ * @brief inserts new IP:MAC entry into arp_table, increses arp_table index
+ * 
+ * @param arp_table 
+ * @param arp_table_index 
+ * @param ip 
+ * @param mac 
+ */
+void update_arp_table(struct arp_entry *arp_table, int *arp_table_index, uint32_t ip, uint8_t *mac);
