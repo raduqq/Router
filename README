@@ -1,0 +1,95 @@
+# PC - Tema 1 - Router
+
+Nume: Radu-Stefan Minea
+Serie: CA
+Grupa: 324CA
+Timp petrecut pe tema: 5 zile
+
+===============================================================================
+## Descrierea solutiei
+
+De principiu, am urmat pasii descrisi in enuntul temei (1. Primeste un pachet..,
+2. Daca este un pachet IP destinat router-ului...)
+
+1. Tabela de rutare
+
+* Parsarea
+    - Procesez token-urile cu ajutorul unui strtok
+    - Convertesc token-urile din string-uri in IP-uri prin `inet_addr`
+    - Verific defensiv convertirea cu succes a acestora
+
+* Preprocesarea
+
+Este necesara functiei de `get_best_route`, ce va cauta in tabela de rutare cea
+mai buna ruta de dirijare a pachetului
+
+    - Sortez cu qsort tablea de rutare in ordine crescatoare dupa prefix si, in
+    caz de egalitate, dupa masca
+
+* Cautarea
+
+Cautarea celei mai bune rute de dirijare a unui pachet se realizeaza printr-o
+cautare binara clasica - complexitate O(logN) pentru o cautare. 
+    
+    - Exista si solutia mai eficienta a unui trie, insa din dorinta de a duce
+    la bun sfarsit tema mai repede nu am avut ocazia sa explorez si aceasta
+    abordare
+
+2. ARP
+
+Pachetul poate fi, in mod exclusiv, fie de tip IP, fie de tip ARP. Daca functia
+`parse_arp` returneaza o valoare nenula, atunci pachetul este de tip ARP
+
+* Request
+    - Cand primesc un Request, trimit un Reply
+        > Updatez adresele Ethernet (MAC-urile) din header-ul Ethernet si trimit
+        un mesaj arp de tip Reply
+
+* Reply
+    - Daca coada de pachete este goala, nu fac nimic (ignor pachetul curent)
+    - Daca nu, incerc sa dau forward primului pachet din coada (= to_send)
+        > Updatez tabela ARP incluzand perechea IP:MAC a pachetului to_send
+        > Caut cea mai buna ruta de forward si trimit pachetul pe acea ruta
+
+
+3. IP
+
+* ICMP
+    - Daca pachetul imi este destinat mie + este de tip ICMP + mai specific,
+    este de tip ICMP_ECO, voi trimite un mesaj ICMP de tip ECHOREPLY
+    - Efectuez verificarea TTL-ului: daca acesta devine 0, trimit un mesaj
+    ICMP de eroare de tip TIME_EXCEEDED
+    - Efectuez verificarea checksum-ului: daca checksum-ul este valid,
+    calculez noul checksum
+
+* Forwarding
+    - Caut cea mai buna ruta catre adresa de destinate regasita in header-ul IP
+    in tabela de rutare
+        > Daca nu exista nicio ruta, trimit un mesaj ICMP de eroare de tip
+        DESTINATION_UNREACHABLE 
+        > Daca exista, caut in tabela ARP entry-ul corespunzator next_hop-ului
+            + Daca nu exista un entry in tabela ARP, trimit un ARP request
+            (pentru a face rost de entry-ul respectiv)
+            + Daca exista, voi sti MAC-ul catre care trebuie sa dirijez si
+            efectuez dirijarea pe `best_route`
+
+===============================================================================
+## Probleme intampinate
+
+* Ar fi fost util un brief al functiilor ajutatoare pe care le puteam folosi.
+Sigur, cateva dintre acestea au fost deja mentionate in enuntul temei,insa, 
+spre exemplu:
+    - Am vrut sa parsez tabela folosind functia `inet_pton` si convertind
+    rezultatul obtinut la endianness-ul masinii `prin ntohl`. Treceau 4 teste
+    - Am lasat ca token-ul sa fie transformat in IP prin functia `inet_addr`.
+    Strict prin aceasta schimbare, au trecut 10 teste
+        > Problema: am petrecut o zi intreaga sa despic IP-ul in 4 sa inteleg
+        de ce `get_best_route` nu reusea sa faca match intre IP-ul destinatie
+        si ce avea el in tabela de rutare in urma parsarii
+
+
+===============================================================================
+## Feedback
+
+Dupa parerea mea, a fost o tema migaloasa si greu de descurcat. Este probabil sa
+fi meritat 3 saptamani si jumatate drept timp de rezolvare.

@@ -9,6 +9,13 @@ int main(int argc, char *argv[]) {
 
 	init(argc - 2, argv + 2);
 
+	// Parse routing table
+	struct route_table_entry *rtable = calloc(MAX_RTABLE_SIZE, sizeof(struct route_table_entry));
+	int rtable_size = read_rtable(rtable, argv[1]);
+
+	// Sort routing table --> prepping binary search for get_best_route
+	qsort(rtable, rtable_size, sizeof(struct route_table_entry), route_entry_cmp);
+
 	// Create ARP Request queue
 	queue arp_queue = queue_create();
 
@@ -16,12 +23,6 @@ int main(int argc, char *argv[]) {
 	struct arp_entry *arp_table = calloc(MAX_ARP_TABLE_SIZE, sizeof(struct arp_entry));
 	int arp_table_index = 0;
 
-	// Parse routing table
-	struct route_table_entry *rtable = calloc(MAX_RTABLE_SIZE, sizeof(struct route_table_entry));
-	int rtable_size = read_rtable(rtable, argv[1]);
-
-	// Sort routing table --> prepping binary search for get_best_route
-	qsort(rtable, rtable_size, sizeof(struct route_table_entry), route_entry_cmp);
 
 	while (1) {
 		// Receive package
@@ -30,11 +31,11 @@ int main(int argc, char *argv[]) {
 
 		// Get eth_hdr
 		struct ether_header *eth_hdr = (struct ether_header *) m.payload;
-		struct arp_header *arp_hdr;
 
 		// Determine type of packet
 		bool arp_packet = false;
 
+		struct arp_header *arp_hdr;
 		if ((arp_hdr = parse_arp((struct ether_header *)m.payload)) != NULL) {
 			arp_packet = true;
 		}
@@ -92,7 +93,7 @@ int main(int argc, char *argv[]) {
 					send_packet(best_route->interface, to_send);
 				}
 			}
-		// ICMP Packet
+		// IP Packet
 		} else {
 			struct iphdr *ip_hdr = (struct iphdr *)(m.payload + sizeof(struct ether_header));
 			struct icmphdr *icmp_hdr = parse_icmp((struct ether_header *) m.payload);
@@ -184,13 +185,6 @@ int main(int argc, char *argv[]) {
 					memcpy(eth_hdr->ether_dhost, broadcast_mac, sizeof(broadcast_mac));
 					// Update Ethernet type
 					eth_hdr->ether_type = htons(ETHERTYPE_ARP);
-
-					/**
-					 * @brief cine sunt daddr si saddr?
-					 * best_route -> urmatorul router din tabela din rutare (interfata prin care trb sa se duca pachetul)
-					 * 
-					 * !voi pleca prin interfata pe care o spune best_route
-					 */
 
 					// Send ARP Request in order to get MAC of target
 					in_addr_t arp_saddr = inet_addr(get_interface_ip(best_route->interface));

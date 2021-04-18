@@ -373,7 +373,7 @@ struct icmphdr * parse_icmp(void *buffer)
 int read_rtable(struct route_table_entry *rtable, char *file_name) {
 	char buf[MAX_LEN];
 	char *token;
-	int i = 0;
+	int size = 0;
 
 	// Open rtable file
 	FILE *f;
@@ -385,28 +385,28 @@ int read_rtable(struct route_table_entry *rtable, char *file_name) {
 	while (fgets(buf, sizeof(buf), f)) {
 		// Prefix
 		token = strtok(buf, DELIM);
-		DIE(!(rtable[i].prefix = inet_addr(token)), "rtable parsing - convert prefix");
+		DIE(!(rtable[size].prefix = inet_addr(token)), "rtable parsing - convert prefix");
 
 		// Next_hop
 		token = strtok(NULL, DELIM);
-		DIE(!(rtable[i].next_hop = inet_addr(token)), "rtable parsing - convert next_hop");
+		DIE(!(rtable[size].next_hop = inet_addr(token)), "rtable parsing - convert next_hop");
 
 		// Mask
 		token = strtok(NULL, DELIM);
-		DIE(!(rtable[i].next_hop = inet_addr(token)), "rtable parsing - convert mask");
+		DIE(!(rtable[size].mask = inet_addr(token)), "rtable parsing - convert mask");
 
 		// Interface
 		token = strtok(NULL, DELIM);
-		rtable[i].interface = atoi(token);		
+		rtable[size].interface = atoi(token);
 
 		// Proceed to next entry
 		memset(buf, 0, sizeof(buf));
-		i++;
+		size++;
 	}
 
 	fclose(f);
 
-	return i;
+	return size;
 }
 
 int route_entry_cmp(const void* a, const void* b) {
@@ -463,8 +463,10 @@ struct arp_entry *get_arp_entry(uint32_t dest_ip, struct arp_entry *arp_table, i
 void update_arp_table(struct arp_entry *arp_table, int *arp_table_index, uint32_t ip, uint8_t *mac) {
 	struct arp_entry *new_entry = calloc(1, sizeof(struct arp_entry));
 
+	// Get info of new_entry
 	new_entry->ip = ip;
 	memcpy(new_entry->mac, mac, sizeof(new_entry->mac));
 
+	// Add new entry to table
 	arp_table[(*arp_table_index)++] = *new_entry;
 }
