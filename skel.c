@@ -4,6 +4,7 @@
 
 int interfaces[ROUTER_NUM_INTERFACES];
 
+
 int get_sock(const char *if_name)
 {
 	int res;
@@ -369,75 +370,57 @@ struct icmphdr * parse_icmp(void *buffer)
 
 }
 
-/* MY FUNCTIONS */
 int read_rtable(struct route_table_entry *rtable, char *file_name) {
 	char buf[MAX_LEN];
 	char *token;
-
 	int i = 0;
-	int status = 1;
 
 	// Open rtable file
-	FILE *f = fopen(file_name, "r");
+	FILE *f;
+	DIE(!(f = fopen(file_name, "r")), "rtable parsing - fopen");
 
-	// Parse each line of rtable
+	// Prep buffer
+	memset(buf, 0, sizeof(buf));
+
 	while (fgets(buf, sizeof(buf), f)) {
 		// Prefix
 		token = strtok(buf, DELIM);
-		DIE((status = inet_pton(AF_INET, token, &rtable[i].prefix)) != 1, "rtable parsing - convert prefix");
-		// Convert to host endianness
-		rtable[i].prefix = ntohl(rtable[i].prefix);
+		DIE(!(rtable[i].prefix = inet_addr(token)), "rtable parsing - convert prefix");
 
 		// Next_hop
 		token = strtok(NULL, DELIM);
-		DIE((status = inet_pton(AF_INET, token, &rtable[i].next_hop)) != 1, "rtable parsing - convert next_hop");
-		// Convert to host endianness
-		rtable[i].next_hop = ntohl(rtable[i].next_hop);
-		
+		DIE(!(rtable[i].next_hop = inet_addr(token)), "rtable parsing - convert next_hop");
+
 		// Mask
 		token = strtok(NULL, DELIM);
-		DIE((status = inet_pton(AF_INET, token, &rtable[i].mask)) != 1, "rtable parsing - convert mask");
-		// Convert to host endianness
-		rtable[i].mask = ntohl(rtable[i].mask);
+		DIE(!(rtable[i].next_hop = inet_addr(token)), "rtable parsing - convert mask");
 
 		// Interface
 		token = strtok(NULL, DELIM);
-		rtable[i].interface = atoi(token);
+		rtable[i].interface = atoi(token);		
 
 		// Proceed to next entry
+		memset(buf, 0, sizeof(buf));
 		i++;
 	}
 
-	// Close rtable file
 	fclose(f);
 
 	return i;
 }
 
 int route_entry_cmp(const void* a, const void* b) {
-	uint32_t prefix_a = ((struct route_table_entry *) a)->prefix;
-	uint32_t prefix_b = ((struct route_table_entry *) b)->prefix;
+	struct route_table_entry e1 = *(struct route_table_entry *) a;
+	struct route_table_entry e2 = *(struct route_table_entry *) b;
 
-	return prefix_a - prefix_b;
+	// Ascending prefix
+	if ((e1.prefix > e2.prefix) 
+		// Ascending mask: if prefix = equal
+		|| (e1.prefix == e2.prefix && e1.mask > e2.mask)) {
+		return 1;
+	}
 
-	// struct route_table_entry *e1 = (struct route_table_entry *) a;
-	// struct route_table_entry *e2 = (struct route_table_entry *) b;
-
-	// //!DEBUG
-	// if (e1->prefix == e2->prefix) {
-	// 	return e1->mask - e2->mask;
-	// }
-
-	// return e1->prefix - e2->prefix;
-
-	// // Ascending prefix
-	// if ((e1.prefix > e2.prefix) 
-	// 	// Ascending mask: if prefix = equal
-	// 	|| (e1.prefix == e2.prefix && e1.mask > e2.mask)) {
-	// 	return 1;
-	// }
-
-	// return -1;
+	return -1;
 }
 
 struct route_table_entry *get_best_route(uint32_t dest_ip, struct route_table_entry *rtable, int rtable_size) {
@@ -455,9 +438,6 @@ struct route_table_entry *get_best_route(uint32_t dest_ip, struct route_table_en
 		if (effective_addr < rtable[mid].prefix) {
 			// Restrain right interval
 			upr_bound = mid - 1;
-			// Update best_route
-			//! DEBUG
-			// best_route = &rtable[mid];
 		} else if (effective_addr == rtable[mid].prefix) {
 			// Target found
 			return &rtable[mid];

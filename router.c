@@ -11,6 +11,7 @@ int main(int argc, char *argv[]) {
 
 	// Create ARP Request queue
 	queue arp_queue = queue_create();
+
 	// Declare dynamic ARP table
 	struct arp_entry *arp_table = calloc(MAX_ARP_TABLE_SIZE, sizeof(struct arp_entry));
 	int arp_table_index = 0;
@@ -22,27 +23,24 @@ int main(int argc, char *argv[]) {
 	// Sort routing table --> prepping binary search for get_best_route
 	qsort(rtable, rtable_size, sizeof(struct route_table_entry), route_entry_cmp);
 
-	// Get eth_hdr
-	struct ether_header *eth_hdr = (struct ether_header *) m.payload;
-
 	while (1) {
 		// Receive package
 		rc = get_packet(&m);
 		DIE(rc < 0, "get_message");
 
+		// Get eth_hdr
+		struct ether_header *eth_hdr = (struct ether_header *) m.payload;
+		struct arp_header *arp_hdr;
+
 		// Determine type of packet
 		bool arp_packet = false;
-		struct arp_header *arp_hdr = parse_arp((struct ether_header *) m.payload);
 
-		if (arp_hdr) {
+		if ((arp_hdr = parse_arp((struct ether_header *)m.payload)) != NULL) {
 			arp_packet = true;
 		}
 
 		// Get machine data
 		in_addr_t machine_addr = inet_addr(get_interface_ip(m.interface));
-		uint8_t machine_mac[ETH_ALEN];
-		memset(machine_mac, 0, sizeof(machine_mac));
-		get_interface_mac(m.interface, machine_mac);
 
 		// ARP Packet
 		if (arp_packet) {
@@ -57,18 +55,12 @@ int main(int argc, char *argv[]) {
 				memcpy(eth_hdr->ether_dhost, arp_hdr->sha, sizeof(arp_hdr->sha));
 
 				send_arp(
-					// daddr = IP of host who requested
-					arp_hdr->spa,
-					// saddr = my IP (I sent, but I was the target before)
-					arp_hdr->tpa,
-					// eth_hdr
-					eth_hdr,
-					// interface
-					m.interface,
-					// arp_op
-					htons(ARPOP_REPLY)
+					// daddr (IP of host who requested); saddr (my IP)
+					arp_hdr->spa, arp_hdr->tpa,
+					// eth_hdr; interface ; arp_op
+					eth_hdr, m.interface, htons(ARPOP_REPLY)
 				);
-			// ARP reply
+				// ARP reply
 			} else {
 				if (queue_empty(arp_queue)) {
 					continue;
@@ -112,50 +104,30 @@ int main(int argc, char *argv[]) {
 					// If ICMP_ECHO : send_icmp
 					if (icmp_hdr->type == ICMP_ECHO) {
 						send_icmp(
-							// daddr = IP of host who requested
-							ip_hdr->saddr,
-							// saddr
-							ip_hdr->daddr,
-							// sha
-							eth_hdr->ether_dhost,
-							// dha
-							eth_hdr->ether_shost,
-							// type
-							ICMP_ECHOREPLY,
-							// code
-							ICMP_ECHOREPLY,
-							// interface
-							m.interface,
-							// id
-							icmp_hdr->un.echo.id,
-							// seq
-							icmp_hdr->un.echo.sequence
+							// daddr, saddr
+							ip_hdr->saddr, ip_hdr->daddr,
+							// sha, dha
+							eth_hdr->ether_dhost, eth_hdr->ether_shost,
+							// type, code, interface
+							ICMP_ECHOREPLY, ICMP_ECHOREPLY, m.interface,
+							// id, seq
+							icmp_hdr->un.echo.id, icmp_hdr->un.echo.sequence
 						);
 					}
-
-					continue;
-				} else {
-					continue;
 				}
+
+				continue;
 			}
 
 			if (ip_hdr->ttl <= 1) {
 				// Send TLE ICMP error
 				send_icmp_error(
-					// daddr
-					ip_hdr->saddr,
-					// saddr
-					machine_addr,
-					// sha
-					eth_hdr->ether_dhost, //! sau machine_mac
-					// dha
-					eth_hdr->ether_shost,
-					// type
-					ICMP_TIME_EXCEEDED,	//! poate si fara htons
-					// code
-					ICMP_EXC_TTL,		//! poate si fara htons
-					// interface
-					m.interface
+					// daddr, saddr
+					ip_hdr->saddr, ip_hdr->daddr,
+					// sha, dha
+					eth_hdr->ether_dhost, eth_hdr->ether_shost,
+					// type, code, interface
+					ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, m.interface
 				);
 
 				// Proceed to next package
@@ -168,7 +140,7 @@ int main(int argc, char *argv[]) {
 			}
 
 			// Recalculate the checksum
-			memset(&ip_hdr->check, 0, sizeof(ip_hdr->check));
+			ip_hdr->check = 0;
 			ip_hdr->check = ip_checksum(ip_hdr, sizeof(struct iphdr));
 
 			// Update TTL
@@ -179,20 +151,12 @@ int main(int argc, char *argv[]) {
 			if (!best_route) {
 				// No route available found --> destination unreachable
 				send_icmp_error(
-					// daddr
-					ip_hdr->saddr,
-					// saddr
-					ip_hdr->daddr,
-					// sha
-					eth_hdr->ether_dhost,
-					// dha
-					eth_hdr->ether_shost,
-					// type
-					ICMP_DEST_UNREACH,
-					// code
-					ICMP_NET_UNREACH,
-					// interface
-					m.interface
+					// daddr, saddr
+					ip_hdr->saddr, ip_hdr->daddr,
+					// sha, dha
+					eth_hdr->ether_dhost, eth_hdr->ether_shost,
+					// type, code, interface
+					ICMP_DEST_UNREACH, ICMP_NET_UNREACH, m.interface
 				);
 
 				continue;
@@ -224,21 +188,17 @@ int main(int argc, char *argv[]) {
 					/**
 					 * @brief cine sunt daddr si saddr?
 					 * best_route -> urmatorul router din tabela din rutare (interfata prin care trb sa se duca pachetul)
+					 * 
+					 * !voi pleca prin interfata pe care o spune best_route
 					 */
 
 					// Send ARP Request in order to get MAC of target
 					in_addr_t arp_saddr = inet_addr(get_interface_ip(best_route->interface));
 					send_arp(
-						// daddr = next hop
-						best_route->next_hop,
-						// saddr = my IP
-						arp_saddr, //! voi pleca prin interfata pe care o spune best_route
-						// eth_hdr
-						eth_hdr,
-						// interface --> ! voi pleca prin interfata pe care o spune best_route
-						best_route->interface,
-						// arp_op
-						htons(ARPOP_REQUEST)
+						// daddr (next hop); saddr (my IP)
+						best_route->next_hop, arp_saddr,
+						// eth_hdr, interface, arp_op
+						eth_hdr, best_route->interface, htons(ARPOP_REQUEST)
 					);
 
 					continue;
