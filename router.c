@@ -32,14 +32,14 @@ int main(int argc, char *argv[]) {
 
 		// Determine type of packet
 		bool arp_packet = false;
-		struct arp_header *arp_hdr = parse_arp(m.payload);
+		struct arp_header *arp_hdr = parse_arp((struct ether_header *) m.payload);
 
 		if (arp_hdr) {
 			arp_packet = true;
 		}
 
 		// Get machine data
-		uint32_t machine_addr = inet_addr(get_interface_ip(m.interface));
+		in_addr_t machine_addr = inet_addr(get_interface_ip(m.interface));
 		uint8_t machine_mac[ETH_ALEN];
 		memset(machine_mac, 0, sizeof(machine_mac));
 		get_interface_mac(m.interface, machine_mac);
@@ -53,8 +53,8 @@ int main(int argc, char *argv[]) {
 						* Destination eth addr = hardware address of sender
 						* Source eth addr = hardware address of target (me)
 				*/
-				memcpy(eth_hdr->ether_dhost, arp_hdr->sha, sizeof(arp_hdr->sha));
 				get_interface_mac(m.interface, eth_hdr->ether_shost);
+				memcpy(eth_hdr->ether_dhost, arp_hdr->sha, sizeof(arp_hdr->sha));
 
 				send_arp(
 					// daddr = IP of host who requested
@@ -70,14 +70,13 @@ int main(int argc, char *argv[]) {
 				);
 			// ARP reply
 			} else {
-
 				if (queue_empty(arp_queue)) {
 					continue;
 				} else {
 					// If queue != empty: forward the first packet in the queue
+					packet *to_send = (packet *) queue_deq(arp_queue);
 
 					// Get Ether & IP info about the packet
-					packet *to_send = (packet *) queue_deq(arp_queue);
 					struct ether_header *to_send_ethhdr = (struct ether_header *) to_send->payload;
 					struct iphdr *to_send_iphdr = (struct iphdr *)(to_send->payload + sizeof(struct ether_header));
 
@@ -87,7 +86,6 @@ int main(int argc, char *argv[]) {
 					memcpy(new_entry_mac, arp_hdr->sha, sizeof(arp_hdr->sha));
 
 					update_arp_table(arp_table, &arp_table_index, new_entry_ip, new_entry_mac);
-					printf("%d\n", arp_table_index);
 
 					// Get best route for packet
 					struct route_table_entry *best_route = get_best_route(to_send_iphdr->daddr, rtable, rtable_size - 1);
@@ -95,7 +93,8 @@ int main(int argc, char *argv[]) {
 					// Update packet info - interface
 					to_send->interface = best_route->interface;
 					// Update packet info - Ether addresses
-					memcpy(to_send_ethhdr->ether_dhost, arp_hdr->sha, sizeof(arp_hdr->sha));
+					memcpy(to_send_ethhdr->ether_dhost, arp_hdr->sha, sizeof(arp_hdr->sha));	// dest
+					get_interface_mac(best_route->interface, to_send_ethhdr->ether_shost);		// src
 
 					// Forward
 					send_packet(best_route->interface, to_send);
@@ -103,8 +102,8 @@ int main(int argc, char *argv[]) {
 			}
 		// ICMP Packet
 		} else {
-			struct icmphdr *icmp_hdr = parse_icmp(m.payload);
 			struct iphdr *ip_hdr = (struct iphdr *)(m.payload + sizeof(struct ether_header));
+			struct icmphdr *icmp_hdr = parse_icmp((struct ether_header *) m.payload);
 
 			// If packet is destined for me
 			if (ip_hdr->daddr == machine_addr) {
@@ -168,10 +167,12 @@ int main(int argc, char *argv[]) {
 				continue;
 			}
 
-			// Update TTL and recalculate the checksum
-			ip_hdr->ttl--;
-			ip_hdr->check = 0;
+			// Recalculate the checksum
+			memset(&ip_hdr->check, 0, sizeof(ip_hdr->check));
 			ip_hdr->check = ip_checksum(ip_hdr, sizeof(struct iphdr));
+
+			// Update TTL
+			ip_hdr->ttl--;
 
 			struct route_table_entry *best_route = get_best_route(ip_hdr->daddr, rtable, rtable_size - 1);
 
@@ -204,7 +205,6 @@ int main(int argc, char *argv[]) {
 
 				// No ARP entry found
 				if (!entry) {
-					//! modify for moss
 					// Allocate memory for enqueued packet
 					packet *m_aux = calloc(1, sizeof(packet));
 					memcpy(m_aux, &m, sizeof(packet));
@@ -227,11 +227,12 @@ int main(int argc, char *argv[]) {
 					 */
 
 					// Send ARP Request in order to get MAC of target
+					in_addr_t arp_saddr = inet_addr(get_interface_ip(best_route->interface));
 					send_arp(
 						// daddr = next hop
 						best_route->next_hop,
 						// saddr = my IP
-						inet_addr(get_interface_ip(best_route->interface)), //! voi pleca prin interfata pe care o spune best_route
+						arp_saddr, //! voi pleca prin interfata pe care o spune best_route
 						// eth_hdr
 						eth_hdr,
 						// interface --> ! voi pleca prin interfata pe care o spune best_route

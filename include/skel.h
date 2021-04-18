@@ -230,8 +230,7 @@ int route_entry_cmp(const void *a, const void *b);
  * @brief Returns a pointer (eg. &rtable[i]) to the best matching route 
  * for the given dest_ip. Or NULL if there is no matching route.
  * 
- * Search method: binary search: find the "biggest" route smaller or equal
- * to the target route
+ * Search method: binary search
  * 
  * @param dest_ip IP of destination
  * @return struct route_table_entry* best route towards destination 
