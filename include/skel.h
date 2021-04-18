@@ -71,7 +71,7 @@ struct arp_header {
 
 struct arp_entry {
 	uint32_t ip;
-	uint8_t mac[6];
+	uint8_t mac[ETH_ALEN];
 };
 
 struct route_table_entry

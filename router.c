@@ -53,14 +53,14 @@ int main(int argc, char *argv[]) {
 						* Destination eth addr = hardware address of sender
 						* Source eth addr = hardware address of target (me)
 				*/
-				memcpy(eth_hdr->ether_dhost, arp_hdr->sha, ETH_ALEN);
+				memcpy(eth_hdr->ether_dhost, arp_hdr->sha, sizeof(arp_hdr->sha));
 				get_interface_mac(m.interface, eth_hdr->ether_shost);
 
 				send_arp(
 					// daddr = IP of host who requested
 					arp_hdr->spa,
-					// saddr = my IP
-					machine_addr,
+					// saddr = my IP (I sent, but I was the target before)
+					arp_hdr->tpa,
 					// eth_hdr
 					eth_hdr,
 					// interface
@@ -74,13 +74,31 @@ int main(int argc, char *argv[]) {
 				if (queue_empty(arp_queue)) {
 					continue;
 				} else {
-					update_arp_table(arp_table, &arp_table_index, machine_addr, machine_mac);
-
-					//TODO: best_route
-
 					// If queue != empty: forward the first packet in the queue
+
+					// Get Ether & IP info about the packet
 					packet *to_send = (packet *) queue_deq(arp_queue);
-					send_packet(m.interface, to_send);
+					struct ether_header *to_send_ethhdr = (struct ether_header *) to_send->payload;
+					struct iphdr *to_send_iphdr = (struct iphdr *)(to_send->payload + sizeof(struct ether_header));
+
+					// Update arp_table : new_entry : ip <-> dest of packet, mac <-> src
+					uint32_t new_entry_ip = to_send_iphdr->daddr;
+					uint8_t new_entry_mac[ETH_ALEN];
+					memcpy(new_entry_mac, arp_hdr->sha, sizeof(arp_hdr->sha));
+
+					update_arp_table(arp_table, &arp_table_index, new_entry_ip, new_entry_mac);
+					printf("%d\n", arp_table_index);
+
+					// Get best route for packet
+					struct route_table_entry *best_route = get_best_route(to_send_iphdr->daddr, rtable, rtable_size - 1);
+
+					// Update packet info - interface
+					to_send->interface = best_route->interface;
+					// Update packet info - Ether addresses
+					memcpy(to_send_ethhdr->ether_dhost, arp_hdr->sha, sizeof(arp_hdr->sha));
+
+					// Forward
+					send_packet(best_route->interface, to_send);
 				}
 			}
 		// ICMP Packet
@@ -114,7 +132,6 @@ int main(int argc, char *argv[]) {
 							// seq
 							icmp_hdr->un.echo.sequence
 						);
-						continue;
 					}
 
 					continue;
@@ -180,7 +197,7 @@ int main(int argc, char *argv[]) {
 				continue;
 			} else {
 				// Find matching ARP entry
-				struct arp_entry *entry = get_arp_entry(ip_hdr->daddr, arp_table, arp_table_index);
+				struct arp_entry *entry = get_arp_entry(best_route->next_hop, arp_table, arp_table_index);
 
 				// Preemptive update of source Ethernet address (always me)
 				get_interface_mac(best_route->interface, eth_hdr->ether_shost);

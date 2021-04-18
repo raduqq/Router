@@ -415,15 +415,20 @@ int read_rtable(struct route_table_entry *rtable, char *file_name) {
 }
 
 int route_entry_cmp(const void* a, const void* b) {
-	struct route_table_entry *e1 = (struct route_table_entry *) a;
-	struct route_table_entry *e2 = (struct route_table_entry *) b;
+	uint32_t prefix_a = ((struct route_table_entry *) a)->prefix;
+	uint32_t prefix_b = ((struct route_table_entry *) b)->prefix;
 
-	//!DEBUG
-	if (e1->prefix == e2->prefix) {
-		return e1->mask - e2->mask;
-	}
+	return prefix_a - prefix_b;
 
-	return e1->prefix - e2->prefix;
+	// struct route_table_entry *e1 = (struct route_table_entry *) a;
+	// struct route_table_entry *e2 = (struct route_table_entry *) b;
+
+	// //!DEBUG
+	// if (e1->prefix == e2->prefix) {
+	// 	return e1->mask - e2->mask;
+	// }
+
+	// return e1->prefix - e2->prefix;
 
 	// // Ascending prefix
 	// if ((e1.prefix > e2.prefix) 
